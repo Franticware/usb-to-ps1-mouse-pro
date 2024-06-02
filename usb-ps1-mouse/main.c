@@ -61,7 +61,14 @@ void cb_disconnect(uint8_t address) {
 
 static int8_t gSumX = 0;
 static int8_t gSumY = 0;
-static int8_t gButtons = 0;
+
+static int8_t gL = 0;
+static int8_t gLUp = 1;
+static int8_t gLDown = 0;
+
+static int8_t gR = 0;
+static int8_t gRUp = 1;
+static int8_t gRDown = 0;
 
 // sum with saturation
 int8_t sumSat(int8_t a, int8_t b) {
@@ -123,11 +130,22 @@ void core1_main() {
                        (uint8_t)o[2], (uint8_t)o[3]);
 #endif
                 mutex_enter_blocking(&mtx);
-
-                gButtons = o[0];
                 gSumX = sumSat(gSumX, o[1]);
                 gSumY = sumSat(gSumY, o[2]);
 
+                gL = o[0] & 1;
+                if (gL) {
+                  gLDown = 1;
+                } else {
+                  gLUp = 1;
+                }
+
+                gR = o[0] & 2;
+                if (gR) {
+                  gRDown = 1;
+                } else {
+                  gRUp = 1;
+                }
                 mutex_exit(&mtx);
               }
             }
@@ -242,6 +260,19 @@ void core0_main() {
   gpio_set_dir(GP_ACK, GPIO_IN);
   gpio_clr_mask((1 << GP_ACK));
 
+  int8_t sumX = 0;
+  int8_t sumY = 0;
+
+  int8_t buttonL = 0;
+  int8_t prevL = 0;
+  int8_t LUp = 0;
+  int8_t LDown = 0;
+
+  int8_t buttonR = 0;
+  int8_t prevR = 0;
+  int8_t RUp = 0;
+  int8_t RDown = 0;
+
   while (1) {
     while (!gpio_get(GP_ATT)) // wait for 1
     {
@@ -252,22 +283,46 @@ void core0_main() {
       tight_loop_contents();
     }
 
-    uint8_t buttons1 = 3;
-    int8_t sumX = 0;
-    int8_t sumY = 0;
-
     mutex_enter_blocking(&mtx);
-    if (gButtons & 1) {
+    sumX = sumSat(sumX, gSumX);
+    gSumX = 0;
+    sumY = sumSat(sumY, gSumY);
+    gSumY = 0;
+
+    LDown = LDown || gLDown;
+    LUp = LUp || gLUp;
+    gLDown = gL;
+    gLUp = !gL;
+
+    RDown = RDown || gRDown;
+    RUp = RUp || gRUp;
+    gRDown = gR;
+    gRUp = !gR;
+    mutex_exit(&mtx);
+
+    if (LUp && LDown) {
+      buttonL = !prevL;
+    } else if (LDown) {
+      buttonL = 1;
+    } else {
+      buttonL = 0;
+    }
+
+    if (RUp && RDown) {
+      buttonR = !prevR;
+    } else if (RDown) {
+      buttonR = 1;
+    } else {
+      buttonR = 0;
+    }
+
+    uint8_t buttons1 = 3;
+    if (buttonL) {
       buttons1 |= 8;
     }
-    if (gButtons & 2) {
+    if (buttonR) {
       buttons1 |= 4;
     }
-    sumX = gSumX;
-    gSumX = 0;
-    sumY = gSumY;
-    gSumY = 0;
-    mutex_exit(&mtx);
 
     if (readCmd() != 0x01) {
       continue;
@@ -307,8 +362,16 @@ void core0_main() {
     }
     // no ack here!
 
-    sumX = 0;
-    sumY = 0;
+    {
+      sumX = 0;
+      sumY = 0;
+      prevL = buttonL;
+      prevR = buttonR;
+      LUp = 0;
+      LDown = 0;
+      RUp = 0;
+      RDown = 0;
+    }
   }
 }
 
