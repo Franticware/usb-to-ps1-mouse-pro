@@ -231,9 +231,7 @@ void parseMouseDescr(const volatile uint8_t *hid, uint32_t hidlen,
       usagepage = data;
       int32_t usagepagename = getPageName(usagepage);
       if (isMouse && conf->btnI == 255 && usagepagename == StrId_Page_Button) {
-        if (mouseAccum % 8)
-          return;
-        conf->btnI = mouseAccum / 8;
+        conf->btnI = mouseAccum;
       }
     } break;
     case 3: {
@@ -241,30 +239,18 @@ void parseMouseDescr(const volatile uint8_t *hid, uint32_t hidlen,
         if (field == FieldInput) {
           if (usageIndexX != 255 && conf->xI == 255) {
             uint32_t i8 = mouseAccum + usageIndexX * reportSize;
-            if (i8 % 8)
-              return;
-            if (reportSize != 8 && reportSize != 16)
-              return;
-            conf->xSize = reportSize / 8;
-            conf->xI = i8 / 8;
+            conf->xSize = reportSize;
+            conf->xI = i8;
           }
           if (usageIndexY != 255 && conf->yI == 255) {
             uint32_t i8 = mouseAccum + usageIndexY * reportSize;
-            if (i8 % 8)
-              return;
-            if (reportSize != 8 && reportSize != 16)
-              return;
-            conf->ySize = reportSize / 8;
-            conf->yI = i8 / 8;
+            conf->ySize = reportSize;
+            conf->yI = i8;
           }
           if (usageIndexWheel != 255 && conf->wheelI == 255) {
             uint32_t i8 = mouseAccum + usageIndexWheel * reportSize;
-            if (i8 % 8)
-              return;
-            if (reportSize != 8 && reportSize != 16)
-              return;
-            conf->wheelSize = reportSize / 8;
-            conf->wheelI = i8 / 8;
+            conf->wheelSize = reportSize;
+            conf->wheelI = i8;
           }
           mouseAccum += reportCount * reportSize;
           usageIndex = 0;
@@ -292,22 +278,132 @@ void parseMouseDescr(const volatile uint8_t *hid, uint32_t hidlen,
   }
 }
 
+int16_t extractBits(const uint8_t *data, uint32_t dataLen, uint8_t aI,
+                    uint8_t aSize) {
+  uint32_t ret32 = 0;
+  uint8_t bI = aI >> 3;
+  uint8_t mI = aI & 7;
+  for (uint32_t i = 0; i != 3; ++i) {
+    if (i + bI < dataLen) {
+      ret32 |= ((uint32_t)data[i + bI]) << (i * 8);
+    }
+  }
+  ret32 = ret32 >> mI;
+  uint16_t ret16 = (uint16_t)ret32;
+
+  switch (aSize) {
+  case 0:
+    ret16 = 0;
+    break;
+  case 1:
+    ret16 &= 1;
+    if (ret16 & 1) {
+      ret16 |= 65534;
+    }
+    break;
+  case 2:
+    ret16 &= 3;
+    if (ret16 & 2) {
+      ret16 |= 65532;
+    }
+    break;
+  case 3:
+    ret16 &= 7;
+    if (ret16 & 4) {
+      ret16 |= 65528;
+    }
+    break;
+  case 4:
+    ret16 &= 15;
+    if (ret16 & 8) {
+      ret16 |= 65520;
+    }
+    break;
+  case 5:
+    ret16 &= 31;
+    if (ret16 & 16) {
+      ret16 |= 65504;
+    }
+    break;
+  case 6:
+    ret16 &= 63;
+    if (ret16 & 32) {
+      ret16 |= 65472;
+    }
+    break;
+  case 7:
+    ret16 &= 127;
+    if (ret16 & 64) {
+      ret16 |= 65408;
+    }
+    break;
+  case 8:
+    ret16 &= 255;
+    if (ret16 & 128) {
+      ret16 |= 65280;
+    }
+    break;
+  case 9:
+    ret16 &= 511;
+    if (ret16 & 256) {
+      ret16 |= 65024;
+    }
+    break;
+  case 10:
+    ret16 &= 1023;
+    if (ret16 & 512) {
+      ret16 |= 64512;
+    }
+    break;
+  case 11:
+    ret16 &= 2047;
+    if (ret16 & 1024) {
+      ret16 |= 63488;
+    }
+    break;
+  case 12:
+    ret16 &= 4095;
+    if (ret16 & 2048) {
+      ret16 |= 61440;
+    }
+    break;
+  case 13:
+    ret16 &= 8191;
+    if (ret16 & 4096) {
+      ret16 |= 57344;
+    }
+    break;
+  case 14:
+    ret16 &= 16383;
+    if (ret16 & 8192) {
+      ret16 |= 49152;
+    }
+    break;
+  case 15:
+    ret16 &= 32767;
+    if (ret16 & 16384) {
+      ret16 |= 32768;
+    }
+    break;
+  default:
+    break;
+  }
+
+  return (int16_t)ret16;
+}
+
 int parseMouseData(const uint8_t *data, uint32_t dataLen, const MouseConf *conf,
                    int8_t o[4]) {
   const int ok = 0;
   const int err = 1;
   o[0] = o[1] = o[2] = o[3] = 0;
-  if (conf->isId && conf->id != data[0]) {
+  if (conf->isId && dataLen > 0 && conf->id != data[0]) {
     return err;
   }
-  if ((uint32_t)(conf->btnI + 1) > dataLen) {
-    return err;
-  }
-  o[0] = data[conf->btnI];
+  o[0] = (int8_t)extractBits(data, dataLen, conf->btnI, 8);
   for (uint32_t i = 0; i != 3; ++i) {
     uint8_t aI = 0;
     uint8_t aSize = 0;
-
     switch (i) {
     case 0:
       aI = conf->xI;
@@ -322,21 +418,13 @@ int parseMouseData(const uint8_t *data, uint32_t dataLen, const MouseConf *conf,
       aSize = conf->wheelSize;
       break;
     }
-    if ((uint32_t)aI + (uint32_t)aSize <= dataLen) {
-      if (aSize == 1) {
-        o[i + 1] = data[aI];
-      } else if (aSize == 2) {
-        int16_t a =
-            (int16_t)(((uint16_t)data[aI]) | (((uint16_t)data[aI + 1]) << 8));
-        if (a < -128)
-          a = 128;
-        if (a > 127)
-          a = 127;
-        o[i + 1] = a;
-      } else {
-        return err;
-      }
+    int16_t a = extractBits(data, dataLen, aI, aSize);
+    if (a < -128) {
+      a = 128;
+    } else if (a > 127) {
+      a = 127;
     }
+    o[i + 1] = (int8_t)a;
   }
   return ok;
 }
