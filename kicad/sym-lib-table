@@ -1,0 +1,5 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "RP2040_board")(type "KiCad")(uri "${KIPRJMOD}/RP2040_board.kicad_sym")(options "")(descr ""))
+  (lib (name "usb2ps1mouse_specific")(type "KiCad")(uri "${KIPRJMOD}/usb2ps1mouse_specific.kicad_sym")(options "")(descr ""))
+)
