@@ -1,4 +1,4 @@
-set(target_name main)
+set(target_name usb-to-ps1-mouse-pro)
 add_executable(${target_name})
 
 pico_enable_stdio_usb(${target_name} 1) 

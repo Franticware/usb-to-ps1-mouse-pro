@@ -5,7 +5,7 @@ do
 if [[ "$m" == *"/RPI-RP2"* ]]
 then
     TARGET_PATH=$(echo "$m" | cut -d" " -f4)
-    if cp build/usb-ps1-mouse/main.uf2 $TARGET_PATH ; then
+    if cp build/usb-ps1-mouse/usb-to-ps1-mouse-pro.uf2 $TARGET_PATH ; then
         echo -n "flashed "
         date
         zenity --info --text "Flashed"
