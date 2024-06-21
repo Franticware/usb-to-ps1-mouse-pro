@@ -10,7 +10,7 @@ This is an adapter for connecting USB mouse to PS1. It emulates the original [SC
 
 ## Firmware
 
-The firmware is written mostly in C. It depends on (Raspberry Pi Pico SDK)[https://github.com/raspberrypi/pico-sdk].
+The firmware is written mostly in C. It depends on [Raspberry Pi Pico SDK](https://github.com/raspberrypi/pico-sdk).
 
 ## Hardware
 
@@ -22,13 +22,13 @@ Printing in clear PETG is recommended.
 
 3D model: https://www.printables.com/model/914178-official-enclosure-for-usb-to-ps1-mouse-pro
 
-## References
+## References - GitHub
+
+This project would not be possible without these. Please go give them a star.
 
 https://github.com/sekigon-gonnoc/Pico-PIO-USB
 
 https://github.com/listff/hidparser
-
-This project would not be possible without these. Please go give them a star.
 
 ## Support this project
 
