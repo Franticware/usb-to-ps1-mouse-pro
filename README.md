@@ -14,9 +14,11 @@ The firmware is written mostly in C. It depends on [Raspberry Pi Pico SDK](https
 
 ## Hardware
 
-Go to `kicad` subdirectory for schematics and PCB design files or check `wiring` subdirectory for laymen-friendly picture guide or if you are looking to rewire your older [usb-to-playstation-mouse](https://github.com/Franticware/usb-to-playstation-mouse) adapter.
+Go to `kicad` subdirectory for schematics and PCB design files. Alternatively, check `wiring` subdirectory for laymen-friendly picture guide or if you are looking to rewire your older [usb-to-playstation-mouse](https://github.com/Franticware/usb-to-playstation-mouse) adapter.
 
 ## Enclosure
+
+The enclosure is intended for the PCB-based variant. The handwired one will not fit.
 
 Printing in clear PETG is recommended.
 
