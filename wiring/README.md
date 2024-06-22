@@ -15,7 +15,11 @@ The cable has colored wires, but the color coding is not guaranteed and has to b
 
 The components are to be wired as follows:
 
-![Wiring diagram](media/wiring.svg)
+![Wiring diagram with Pi Pico](media/wiring.svg)
+
+Or with RP2040-Zero:
+
+![Wiring diagram with RP2040-Zero](media/wiring2.svg)
 
 Make sure the components and wires do not short anywhere.
 
