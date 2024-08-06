@@ -250,6 +250,7 @@ void core0_main() {
   gpio_set_dir(GP_CLK, GPIO_IN);
 
   gpio_init(GP_DAT);
+  gpio_set_slew_rate(GP_DAT, GPIO_SLEW_RATE_SLOW);
   gpio_set_dir(GP_DAT, GPIO_IN);
   gpio_clr_mask((1 << GP_DAT));
 
@@ -257,6 +258,7 @@ void core0_main() {
   gpio_set_dir(GP_CMD, GPIO_IN);
 
   gpio_init(GP_ACK);
+  gpio_set_slew_rate(GP_ACK, GPIO_SLEW_RATE_SLOW);
   gpio_set_dir(GP_ACK, GPIO_IN);
   gpio_clr_mask((1 << GP_ACK));
 
