@@ -7,6 +7,7 @@
 #include "pico/mutex.h"
 #include "pico/stdlib.h"
 #include "pio_usb.h"
+#include "ws2812.h"
 
 auto_init_mutex(mtx);
 
@@ -19,6 +20,9 @@ static uint8_t mouseAddress = 0;
 static uint8_t mouseEP = 0;
 
 #define DEBUG_STDOUT 0
+
+#define COLOR_FAINT_RED 0x000300
+#define COLOR_FAINT_ORANGE 0x010300
 
 void cb_hid_descriptor(uint8_t address, uint16_t length,
                        const volatile uint8_t *data) {
@@ -61,8 +65,8 @@ void cb_disconnect(uint8_t address) {
 
 static int8_t gSumX = 0;
 static int8_t gSumY = 0;
-static int8_t gL = 0;
-static int8_t gR = 0;
+static bool gL = false;
+static bool gR = false;
 
 // sum with saturation
 int8_t sumSat(int8_t a, int8_t b) {
@@ -252,12 +256,29 @@ void core0_main(void) {
   gpio_set_dir(GP_ACK, GPIO_IN);
   gpio_clr_mask((1 << GP_ACK));
 
+  bool updateRgb = false;
+  bool firstRgb = true;
+  bool buttonL = false;
+  bool buttonR = false;
+
   for (;;) {
     while (!noAtt()) // wait to finish current attention cycle
     {
       tight_loop_contents();
     }
-    sleep_us(5);    // free to do something fun here
+    if (updateRgb) {
+      if (firstRgb) {
+        firstRgb = false;
+        gpio_init(GP_RGB);
+        gpio_set_slew_rate(GP_RGB, GPIO_SLEW_RATE_SLOW);
+        gpio_set_dir(GP_RGB, GPIO_OUT);
+        gpio_clr_mask(1 << GP_RGB);
+        sleep_us(5);
+      }
+      set_ws2812(buttonL ? COLOR_FAINT_ORANGE : COLOR_FAINT_RED);
+      updateRgb = false;
+    }
+
     while (noAtt()) // wait for new attention signal
     {
       tight_loop_contents();
@@ -288,8 +309,8 @@ void core0_main(void) {
     gSumX = 0;
     int8_t sumY = gSumY;
     gSumY = 0;
-    int8_t buttonL = gL;
-    int8_t buttonR = gR;
+    buttonL = gL;
+    buttonR = gR;
     mutex_exit(&mtx);
 
     uint8_t buttons1 = 3;
@@ -317,6 +338,7 @@ void core0_main(void) {
       continue;
     }
     // no ack here!
+    updateRgb = true;
   }
 }
 

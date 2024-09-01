@@ -1,11 +1,12 @@
 set(target_name usb-to-ps1-mouse-pro)
 add_executable(${target_name})
 
-pico_enable_stdio_usb(${target_name} 1) 
+pico_enable_stdio_usb(${target_name} 1)
 
 target_sources(${target_name} PRIVATE
  main.c
  parsemouse.c
+ ws2812.c
  )
 
 # print memory usage, enable all warnings
