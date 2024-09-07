@@ -21,6 +21,7 @@ static uint8_t mouseEP = 0;
 
 #define DEBUG_STDOUT 0
 
+#define COLOR_BLACK 0x000000
 #define COLOR_FAINT_RED 0x000300
 #define COLOR_FAINT_ORANGE 0x010300
 
@@ -256,8 +257,17 @@ void core0_main(void) {
   gpio_set_dir(GP_ACK, GPIO_IN);
   gpio_clr_mask((1 << GP_ACK));
 
+  gpio_init(GP_RGB);
+  gpio_set_slew_rate(GP_RGB, GPIO_SLEW_RATE_SLOW);
+  gpio_set_dir(GP_RGB, GPIO_OUT);
+  gpio_clr_mask(1 << GP_RGB);
+  sleep_us(WS2812_RESET_US);
+  set_ws2812(COLOR_BLACK);
+  sleep_us(WS2812_RESET_US);
+  set_ws2812(COLOR_BLACK);
+  sleep_us(WS2812_RESET_US);
+
   bool updateRgb = false;
-  bool firstRgb = true;
   bool buttonL = false;
   bool buttonR = false;
 
@@ -266,15 +276,8 @@ void core0_main(void) {
     {
       tight_loop_contents();
     }
+
     if (updateRgb) {
-      if (firstRgb) {
-        firstRgb = false;
-        gpio_init(GP_RGB);
-        gpio_set_slew_rate(GP_RGB, GPIO_SLEW_RATE_SLOW);
-        gpio_set_dir(GP_RGB, GPIO_OUT);
-        gpio_clr_mask(1 << GP_RGB);
-        sleep_us(5);
-      }
       set_ws2812(buttonL ? COLOR_FAINT_ORANGE : COLOR_FAINT_RED);
       updateRgb = false;
     }
@@ -346,7 +349,9 @@ int main() {
   // default 125MHz is not appropriate. Sysclock should be multiple of 12 MHz.
   set_sys_clock_khz(120000, true);
 
+#if DEBUG_STDOUT
   stdio_usb_init();
+#endif
 
   sleep_ms(10);
 
