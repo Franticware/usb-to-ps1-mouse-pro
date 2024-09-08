@@ -195,7 +195,7 @@ uint16_t readCmdWriteData(uint8_t data) {
       tight_loop_contents();
     }
     if (noAtt()) {
-      gpio_set_dir(GP_DAT, GPIO_IN);
+      setBus(GP_DAT);
       return NO_ATT;
     }
     ret |= gpio_get(GP_CMD) << i;
