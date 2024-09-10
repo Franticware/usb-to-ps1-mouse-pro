@@ -266,7 +266,7 @@ void core0_main(void) {
   sleep_us(WS2812_RESET_US);
   set_ws2812(COLOR_BLACK);
   sleep_us(WS2812_RESET_US);
-  set_ws2812(COLOR_BLACK);
+  set_ws2812(COLOR_FAINT_MOUSE_GREEN);
   sleep_us(WS2812_RESET_US);
 
   bool updateRgb = false;
