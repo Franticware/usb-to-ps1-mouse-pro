@@ -22,8 +22,8 @@ static uint8_t mouseEP = 0;
 #define DEBUG_STDOUT 0
 
 #define COLOR_BLACK 0x000000
-#define COLOR_FAINT_RED 0x000300
-#define COLOR_FAINT_ORANGE 0x010300
+#define COLOR_FAINT_MOUSE_GREEN 0x020001
+#define COLOR_FAINT_WARM_WHITE 0x020201
 
 void cb_hid_descriptor(uint8_t address, uint16_t length,
                        const volatile uint8_t *data) {
@@ -41,7 +41,9 @@ void cb_hid_descriptor(uint8_t address, uint16_t length,
     mouseAddress = address;
     mouseConf = mouseConfTmp;
   }
+#if DEBUG_STDOUT
   stdio_flush();
+#endif
 }
 
 void cb_hid_epaddr(uint8_t address, uint8_t epaddr) {
@@ -278,7 +280,7 @@ void core0_main(void) {
     }
 
     if (updateRgb) {
-      set_ws2812(buttonL ? COLOR_FAINT_ORANGE : COLOR_FAINT_RED);
+      set_ws2812(buttonL ? COLOR_FAINT_WARM_WHITE : COLOR_FAINT_MOUSE_GREEN);
       updateRgb = false;
     }
 
