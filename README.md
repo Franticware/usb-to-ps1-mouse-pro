@@ -14,7 +14,7 @@ The firmware is written mostly in C. It depends on [Raspberry Pi Pico SDK](https
 
 ## Hardware
 
-Go to `kicad` subdirectory for schematics and PCB design files. Alternatively, check `wiring` subdirectory for laymen-friendly picture guide or if you are looking to rewire your older [usb-to-playstation-mouse](https://github.com/Franticware/usb-to-playstation-mouse) adapter.
+See [kicad](kicad) subdirectory for schematics and PCB design files. Alternatively, check [wiring](wiring) subdirectory for laymen-friendly picture guide or if you are looking to rewire your older [usb-to-playstation-mouse](https://github.com/Franticware/usb-to-playstation-mouse) adapter.
 
 ## Enclosure
 
@@ -23,6 +23,12 @@ The enclosure is intended for the PCB-based variant. The handwired one will not 
 Printing in clear PETG is recommended.
 
 3D model: https://www.printables.com/model/914178-official-enclosure-for-usb-to-ps1-mouse-pro
+
+## Notes
+
+* Known issues:
+  * In rare cases, Lemmings might pause during gameplay.
+  * USB mouse compatibility is not 100%. The same applies to USB keyboards.
 
 ## References - GitHub
 
