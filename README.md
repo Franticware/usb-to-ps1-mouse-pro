@@ -29,6 +29,9 @@ Printing in clear PETG is recommended.
 * Known issues:
   * In rare cases, Lemmings might pause during gameplay.
   * USB mouse compatibility is not 100%. The same applies to USB keyboards.
+* Gameplay video:
+
+[![Quake II gameplay youtube video](media/q2-gameplay-yt.jpg)](https://youtu.be/i6l8ecVfj7o)
 
 ## References - GitHub
 
