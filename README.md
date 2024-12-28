@@ -12,6 +12,8 @@ This is an adapter for connecting USB mouse to PS1. It emulates the original [SC
 
 The firmware is written mostly in C. It depends on [Raspberry Pi Pico SDK](https://github.com/raspberrypi/pico-sdk).
 
+For a guide on how to update the firmware, see [Flashing the Firmware](doc/flashing-the-firmware).
+
 ## Hardware
 
 See [kicad](kicad) subdirectory for schematics and PCB design files. Alternatively, check [wiring](wiring) subdirectory for laymen-friendly picture guide or if you are looking to rewire your older [usb-to-playstation-mouse](https://github.com/Franticware/usb-to-playstation-mouse) adapter.
