@@ -29,6 +29,7 @@ Printing in clear PETG is recommended.
 ## Notes
 
 * Known issues:
+  * **Incompatible with PSOne** (SCPH-10X), where there are issues such as game stuttering and console reset.
   * In rare cases, Lemmings might pause during gameplay.
   * USB mouse compatibility is not 100%. The same applies to USB keyboards.
 * Gameplay video:
