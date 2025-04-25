@@ -1,3 +1,3 @@
 #!/bin/bash
 
-rm -R build
+rm -fR build

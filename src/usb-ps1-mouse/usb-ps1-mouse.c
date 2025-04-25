@@ -25,9 +25,8 @@
  */
 
 // This example runs both host and device concurrently. The USB host receive
-// reports from HID device and print it out over USB Device CDC interface.
-// For TinyUSB roothub port0 is native usb controller, roothub port1 is
-// pico-pio-usb.
+// reports from HID device and print it out.
+// For TinyUSB roothub port0 is native usb controller
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -95,35 +94,17 @@ int main(void) {
 
   sleep_ms(10);
 
+  stdio_init_all();
+
   multicore_reset_core1();
   // all USB task run in core1
   multicore_launch_core1(core1_main);
 
-  // init device stack on native usb (roothub port0)
-  tud_init(0);
-
   while (true) {
-    tud_task(); // tinyusb device task
-    tud_cdc_write_flush();
+    tight_loop_contents();
   }
 
   return 0;
-}
-
-//--------------------------------------------------------------------+
-// Device CDC
-//--------------------------------------------------------------------+
-
-// Invoked when CDC interface received data from host
-void tud_cdc_rx_cb(uint8_t itf)
-{
-  (void) itf;
-
-  char buf[64];
-  uint32_t count = tud_cdc_read(buf, sizeof(buf));
-
-  // TODO control LED on keyboard of host stack
-  (void) count;
 }
 
 //--------------------------------------------------------------------+
@@ -137,16 +118,12 @@ void tud_cdc_rx_cb(uint8_t itf)
 // therefore report_desc = NULL, desc_len = 0
 void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len)
 {
-  char buff[64];
-  sprintf(buff, "DESCR len=%u;", desc_len);
-  tud_cdc_write_str(buff);
+  printf("DESCR len=%u;", desc_len);
   for (int i = 0; i != desc_len; ++i)
   {
-    sprintf(buff, " %x", desc_report[i]);
-    tud_cdc_write_str(buff);
+    printf(" %x", desc_report[i]);
   }
-  tud_cdc_write_str("\r\n");
-
+  printf("\r\n");
 
   (void)desc_report;
   (void)desc_len;
@@ -158,11 +135,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
   uint16_t vid, pid;
   tuh_vid_pid_get(dev_addr, &vid, &pid);
 
-  char tempbuf[256];
-  int count = sprintf(tempbuf, "[%04x:%04x][%u] HID Interface%u, Protocol = %s\r\n", vid, pid, dev_addr, instance, protocol_str[itf_protocol]);
-
-  tud_cdc_write(tempbuf, count);
-  tud_cdc_write_flush();
+  printf("[%04x:%04x][%u] HID Interface%u, Protocol = %s\r\n", vid, pid, dev_addr, instance, protocol_str[itf_protocol]);
 
   // Receive report from boot keyboard & mouse only
   // tuh_hid_report_received_cb() will be invoked when report is available
@@ -170,7 +143,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
   {
     if ( !tuh_hid_receive_report(dev_addr, instance) )
     {
-      tud_cdc_write_str("Error: cannot request report\r\n");
+      printf("Error: cannot request report\r\n");
     }
   }
 }
@@ -178,10 +151,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
 // Invoked when device with hid interface is un-mounted
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
 {
-  char tempbuf[256];
-  int count = sprintf(tempbuf, "[%u] HID Interface%u is unmounted\r\n", dev_addr, instance);
-  tud_cdc_write(tempbuf, count);
-  tud_cdc_write_flush();
+  printf("[%u] HID Interface%u is unmounted\r\n", dev_addr, instance);
 }
 
 // look up new key in previous keys
@@ -196,12 +166,11 @@ static inline bool find_key_in_report(hid_keyboard_report_t const *report, uint8
 }
 
 
-// convert hid keycode to ascii and print via usb device CDC (ignore non-printable)
+// convert hid keycode to ascii and print
 static void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const *report)
 {
   (void) dev_addr;
   static hid_keyboard_report_t prev_report = { 0, 0, {0} }; // previous report to check key released
-  bool flush = false;
 
   for(uint8_t i=0; i<6; i++)
   {
@@ -226,21 +195,18 @@ static void process_kbd_report(uint8_t dev_addr, hid_keyboard_report_t const *re
 
         if (ch)
         {
-          if (ch == '\n') tud_cdc_write("\r", 1);
-          tud_cdc_write(&ch, 1);
-          flush = true;
+          if (ch == '\n') printf("\r");
+          printf("%c", ch);
         }
       }
     }
     // TODO example skips key released
   }
 
-  if (flush) tud_cdc_write_flush();
-
   prev_report = *report;
 }
 
-// send mouse report to usb device CDC
+// process mouse report and print
 static void process_mouse_report(uint8_t dev_addr, hid_mouse_report_t const * report)
 {
   //------------- button state  -------------//
@@ -249,25 +215,18 @@ static void process_mouse_report(uint8_t dev_addr, hid_mouse_report_t const * re
   char m = report->buttons & MOUSE_BUTTON_MIDDLE ? 'M' : '-';
   char r = report->buttons & MOUSE_BUTTON_RIGHT  ? 'R' : '-';
 
-  char tempbuf[32];
-  int count = sprintf(tempbuf, "[%u] %c%c%c %d %d %d\r\n", dev_addr, l, m, r, report->x, report->y, report->wheel);
-
-  tud_cdc_write(tempbuf, count);
-  tud_cdc_write_flush();
+  printf("[%u] %c%c%c %d %d %d\r\n", dev_addr, l, m, r, report->x, report->y, report->wheel);
 }
 
 // Invoked when received report from device via interrupt endpoint
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len)
 {
-  char buff[64];
-  sprintf(buff, "REPORT len=%u;", len);
-  tud_cdc_write_str(buff);
+  printf("REPORT len=%u;", len);
   for (int i = 0; i != len; ++i)
   {
-    sprintf(buff, " %x", report[i]);
-    tud_cdc_write_str(buff);
+    printf(" %x", report[i]);
   }
-  tud_cdc_write_str("\r\n");
+  printf("\r\n");
 
   (void) len;
   uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
@@ -288,6 +247,6 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
   // continue to request to receive report
   if ( !tuh_hid_receive_report(dev_addr, instance) )
   {
-    tud_cdc_write_str("Error: cannot request report\r\n");
+    printf("Error: cannot request report\r\n");
   }
 }
