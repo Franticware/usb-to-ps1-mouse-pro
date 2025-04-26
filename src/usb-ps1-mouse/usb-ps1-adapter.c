@@ -24,10 +24,6 @@
  *
  */
 
-// This example runs both host and device concurrently. The USB host receive
-// reports from HID device and print it out.
-// For TinyUSB roothub port0 is native usb controller
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,6 +43,9 @@
 //--------------------------------------------------------------------+
 // MACRO CONSTANT TYPEDEF PROTYPES
 //--------------------------------------------------------------------+
+
+#define IS_RGBW false
+#define WS2812_PIN 16
 
 // uncomment if you are using colemak layout
 // #define KEYBOARD_COLEMAK
@@ -95,8 +94,42 @@ int main(void) {
   // all USB task run in core1
   multicore_launch_core1(core1_main);
 
+
+
+
+  // todo get free sm
+  PIO pio;
+  uint sm;
+  uint offset;
+
+  // This will find a free pio and state machine for our program and load it for us
+  // We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range variant)
+  // so we will get a PIO instance suitable for addressing gpios >= 32 if needed and supported by the hardware
+  bool success = pio_claim_free_sm_and_add_program_for_gpio_range(&ws2812_program, &pio, &sm, &offset, WS2812_PIN, 1, true);
+  hard_assert(success);
+
+  ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
+
+  uint32_t pixel_grb = 0;
+
   while (true) {
-    tight_loop_contents();
+    //tight_loop_contents();
+
+    pixel_grb = 0x110000;
+
+    sleep_ms(250);
+    pio_sm_put_blocking(pio, sm, pixel_grb << 8u);
+
+    pixel_grb = 0x001100;
+
+    sleep_ms(250);
+    pio_sm_put_blocking(pio, sm, pixel_grb << 8u);
+
+    pixel_grb = 0x000011;
+
+    sleep_ms(250);
+    pio_sm_put_blocking(pio, sm, pixel_grb << 8u);
+
   }
 
   return 0;
