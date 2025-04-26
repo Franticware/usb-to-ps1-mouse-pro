@@ -1,8 +1,10 @@
-set(target_name host_hid_to_device_cdc)
+set(target_name usb_ps1_mouse)
 add_executable(${target_name})
 
+pico_generate_pio_header(${target_name} ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio OUTPUT_DIR ${CMAKE_CURRENT_LIST_DIR})
+
 target_sources(${target_name} PRIVATE
- usb-ps1-mouse.c
+ usb-ps1-adapter.c
  # can use 'tinyusb_pico_pio_usb' library later when pico-sdk is updated
  ${PICO_TINYUSB_PATH}/src/portable/raspberrypi/pio_usb/hcd_pio_usb.c
  )
