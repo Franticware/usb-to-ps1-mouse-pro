@@ -148,7 +148,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance,
                       uint8_t const *desc_report, uint16_t desc_len) {
   printf("DESCR len=%u;", desc_len);
   for (int i = 0; i != desc_len; ++i) {
-    printf(" %x", desc_report[i]);
+    printf(" %02x", desc_report[i]);
   }
   printf("\r\n");
 
@@ -248,7 +248,7 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance,
                                 uint8_t const *report, uint16_t len) {
   printf("REPORT len=%u;", len);
   for (int i = 0; i != len; ++i) {
-    printf(" %x", report[i]);
+    printf(" %02x", report[i]);
   }
   printf("\r\n");
 
