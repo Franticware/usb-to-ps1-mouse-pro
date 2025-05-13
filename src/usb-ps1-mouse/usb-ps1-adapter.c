@@ -1,29 +1,3 @@
-/*
- * The MIT License (MIT)
- *
- * Copyright (c) 2019 Ha Thach (tinyusb.org)
- *                    sekigon-gonnoc
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- *
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,19 +20,6 @@
 
 #define IS_RGBW false
 #define WS2812_PIN 16
-
-// uncomment if you are using colemak layout
-// #define KEYBOARD_COLEMAK
-
-#ifdef KEYBOARD_COLEMAK
-const uint8_t colemak[128] = {
-    0, 0,  0,  0,  0,  0, 0, 22, 9,  23, 7, 0,  24, 17, 8, 12, 0, 14, 28, 51,
-    0, 19, 21, 10, 15, 0, 0, 0,  13, 0,  0, 0,  0,  0,  0, 0,  0, 0,  0,  0,
-    0, 0,  0,  0,  0,  0, 0, 0,  0,  0,  0, 18, 0,  0,  0, 0,  0, 0,  0,  0,
-    0, 0,  0,  0,  0,  0, 0, 0,  0,  0,  0, 0,  0,  0,  0, 0,  0, 0,  0,  0};
-#endif
-
-static uint8_t const keycode2ascii[128][2] = {HID_KEYCODE_TO_ASCII};
 
 /*------------- MAIN -------------*/
 
@@ -146,14 +107,6 @@ int main(void) {
 // it will be skipped therefore report_desc = NULL, desc_len = 0
 void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance,
                       uint8_t const *desc_report, uint16_t desc_len) {
-  printf("DESCR len=%u;", desc_len);
-  for (int i = 0; i != desc_len; ++i) {
-    printf(" %02x", desc_report[i]);
-  }
-  printf("\r\n");
-
-  (void)desc_report;
-  (void)desc_len;
 
   // Interface protocol (hid_interface_protocol_enum_t)
   const char *protocol_str[] = {"None", "Keyboard", "Mouse"};
@@ -162,22 +115,35 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance,
   uint16_t vid, pid;
   tuh_vid_pid_get(dev_addr, &vid, &pid);
 
-  printf("[%04x:%04x][%u] HID Interface%u, Protocol = %s\r\n", vid, pid,
-         dev_addr, instance, protocol_str[itf_protocol]);
+  absolute_time_t currentTime = to_us_since_boot(get_absolute_time());
+
+  printf("{\"event\":\"mount\",\"timestamp\":\"%llu\",\"vid\":\"%04x\",\"pid\":\"%04x\",\"address\":\"%u\",\"instance\":\"%u\",\"protocol\":\"%s\",", currentTime, vid, pid, dev_addr, instance, protocol_str[itf_protocol]);
+
+  printf("\"data\":\"");
+
+  for (int i = 0; i != desc_len; ++i) {
+    if (i != 0)
+      printf(" ");
+    printf("%02x", desc_report[i]);
+  }
+  printf("\"");
+
 
   // Receive report from boot keyboard & mouse only
   // tuh_hid_report_received_cb() will be invoked when report is available
   if (itf_protocol == HID_ITF_PROTOCOL_KEYBOARD ||
       itf_protocol == HID_ITF_PROTOCOL_MOUSE) {
     if (!tuh_hid_receive_report(dev_addr, instance)) {
-      printf("Error: cannot request report\r\n");
+      printf(",\"error\":\"cannot request report\"");
     }
   }
+  printf("},\n");
 }
 
 // Invoked when device with hid interface is un-mounted
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
-  printf("[%u] HID Interface%u is unmounted\r\n", dev_addr, instance);
+  absolute_time_t currentTime = to_us_since_boot(get_absolute_time());
+  printf("{\"event\":\"umount\",\"timestamp\":\"%llu\",\"address\":\"%u\",\"instance\":\"%u\"},\n", currentTime, dev_addr, instance);
 }
 
 // look up new key in previous keys
@@ -191,85 +157,27 @@ static inline bool find_key_in_report(hid_keyboard_report_t const *report,
   return false;
 }
 
-// convert hid keycode to ascii and print
-static void process_kbd_report(uint8_t dev_addr,
-                               hid_keyboard_report_t const *report) {
-  (void)dev_addr;
-  static hid_keyboard_report_t prev_report = {
-      0, 0, {0}}; // previous report to check key released
-
-  for (uint8_t i = 0; i < 6; i++) {
-    uint8_t keycode = report->keycode[i];
-    if (keycode) {
-      if (find_key_in_report(&prev_report, keycode)) {
-        // exist in previous report means the current key is holding
-      } else {
-// not existed in previous report means the current key is pressed
-
-// remap the key code for Colemak layout
-#ifdef KEYBOARD_COLEMAK
-        uint8_t colemak_key_code = colemak[keycode];
-        if (colemak_key_code != 0)
-          keycode = colemak_key_code;
-#endif
-
-        bool const is_shift = report->modifier & (KEYBOARD_MODIFIER_LEFTSHIFT |
-                                                  KEYBOARD_MODIFIER_RIGHTSHIFT);
-        uint8_t ch = keycode2ascii[keycode][is_shift ? 1 : 0];
-
-        if (ch) {
-          if (ch == '\n')
-            printf("\r");
-          printf("%c", ch);
-        }
-      }
-    }
-    // TODO example skips key released
-  }
-
-  prev_report = *report;
-}
-
-// process mouse report and print
-static void process_mouse_report(uint8_t dev_addr,
-                                 hid_mouse_report_t const *report) {
-  //------------- button state  -------------//
-  // uint8_t button_changed_mask = report->buttons ^ prev_report.buttons;
-  char l = report->buttons & MOUSE_BUTTON_LEFT ? 'L' : '-';
-  char m = report->buttons & MOUSE_BUTTON_MIDDLE ? 'M' : '-';
-  char r = report->buttons & MOUSE_BUTTON_RIGHT ? 'R' : '-';
-
-  printf("[%u] %c%c%c %d %d %d\r\n", dev_addr, l, m, r, report->x, report->y,
-         report->wheel);
-}
-
 // Invoked when received report from device via interrupt endpoint
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance,
                                 uint8_t const *report, uint16_t len) {
-  printf("REPORT len=%u;", len);
+
+  absolute_time_t currentTime = to_us_since_boot(get_absolute_time());
+
+  printf("{\"event\":\"report\",\"timestamp\":\"%llu\",\"address\":\"%u\",\"instance\":\"%u\",", currentTime, dev_addr, instance);
+
+  printf("\"data\":\"");
+
   for (int i = 0; i != len; ++i) {
-    printf(" %02x", report[i]);
+    if (i != 0)
+      printf(" ");
+    printf("%02x", report[i]);
   }
-  printf("\r\n");
-
-  (void)len;
-  uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
-
-  switch (itf_protocol) {
-  case HID_ITF_PROTOCOL_KEYBOARD:
-    process_kbd_report(dev_addr, (hid_keyboard_report_t const *)report);
-    break;
-
-  case HID_ITF_PROTOCOL_MOUSE:
-    process_mouse_report(dev_addr, (hid_mouse_report_t const *)report);
-    break;
-
-  default:
-    break;
-  }
+  printf("\"");
 
   // continue to request to receive report
   if (!tuh_hid_receive_report(dev_addr, instance)) {
-    printf("Error: cannot request report\r\n");
+    printf(",\"error\":\"cannot request report\"");
   }
+
+  printf("},\n");
 }
