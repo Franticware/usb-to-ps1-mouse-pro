@@ -4,6 +4,7 @@
 
 #include "hardware/clocks.h"
 #include "hardware/pio.h"
+#include "parsemouse.h"
 #include "pico/bootrom.h"
 #include "pico/multicore.h"
 #include "pico/stdlib.h"
@@ -29,6 +30,23 @@
 
 /*------------- MAIN -------------*/
 
+// uint32_t gPixGRB = 0;
+
+#define PIX_OFF 0
+#define PIX_BLINK 1
+#define PIX_MOUSE 2
+#define PIX_KEYB 3
+#define PIX_CLICK 4
+#define PIX_OVF 5
+
+#define COLOR_BLACK 0x000000
+#define COLOR_FAINT_MOUSE_GREEN 0x020001
+#define COLOR_FAINT_KEYBOARD_VIOLET 0x000202
+#define COLOR_FAINT_RED 0x000300
+#define COLOR_FAINT_WARM_WHITE 0x020201
+
+uint8_t gPixState = PIX_OFF;
+
 // core1: handle host events
 void core1_main() {
   sleep_ms(10);
@@ -43,8 +61,74 @@ void core1_main() {
   // port1) on core1
   tuh_init(1);
 
+  PIO pio;
+  uint sm;
+  uint offset;
+
+  // This will find a free pio and state machine for our program and load it for
+  // us We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range
+  // variant) so we will get a PIO instance suitable for addressing gpios >= 32
+  // if needed and supported by the hardware
+  bool success = pio_claim_free_sm_and_add_program_for_gpio_range(
+      &ws2812_program, &pio, &sm, &offset, WS2812_PIN, 1, true);
+  hard_assert(success);
+
+  ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
+
+  uint64_t prevTime = to_us_since_boot(get_absolute_time());
+
+  uint64_t timeSum = 0;
+
+  const uint64_t updatePeriod = 50 * 1000;
+
+  gPixState = PIX_BLINK;
+  uint8_t blinkI = 0;
+
+  uint32_t pixGRB = 0;
+
   while (true) {
     tuh_task(); // tinyusb host task
+
+    uint64_t currTime = to_us_since_boot(get_absolute_time());
+    timeSum += (currTime - prevTime);
+    prevTime = currTime;
+
+    if (timeSum >= updatePeriod) {
+      timeSum -= updatePeriod;
+      switch (gPixState) {
+      case PIX_OFF:
+        pixGRB = COLOR_BLACK;
+        break;
+      case PIX_BLINK:
+        if (blinkI < 10) {
+          pixGRB = COLOR_FAINT_WARM_WHITE;
+        } else {
+          pixGRB = COLOR_BLACK;
+        }
+        break;
+      case PIX_MOUSE:
+        pixGRB = COLOR_FAINT_MOUSE_GREEN;
+        break;
+      case PIX_KEYB:
+        pixGRB = COLOR_FAINT_KEYBOARD_VIOLET;
+        break;
+      case PIX_OVF:
+        pixGRB = COLOR_FAINT_RED;
+        break;
+      case PIX_CLICK:
+        pixGRB = COLOR_FAINT_WARM_WHITE;
+        break;
+      default:
+        gPixState = PIX_OFF;
+        pixGRB = COLOR_BLACK;
+        break;
+      }
+      ++blinkI;
+      if (blinkI == 20) {
+        blinkI = 0;
+      }
+      pio_sm_put_blocking(pio, sm, pixGRB << 8u);
+    }
   }
 }
 
@@ -58,8 +142,8 @@ typedef struct {
   uint8_t i; // bit index
   uint8_t y; // byte index
   uint8_t cmd[2];
-  uint8_t data[10];
-  uint8_t size;
+  uint8_t data[10]; // mouse/pad data
+  uint8_t size;     // mouse/pad data size
 } ConSM;
 
 ConSM gSM;
@@ -91,12 +175,9 @@ void SM_task() {
     break;
   }
   case SM_A0C1: {
-
     if (!gpio_get(GP_CLK)) {
       gSM.state = SM_A0C0;
-
       // falling edge clock
-
       if (gSM.y > 0 && gSM.y <= gSM.size) {
         if (gSM.data[gSM.y - 1] & (1 << gSM.i)) {
           gpio_set_dir(GP_DAT, GPIO_IN);
@@ -104,30 +185,23 @@ void SM_task() {
           gpio_set_dir(GP_DAT, GPIO_OUT);
         }
       }
-
     } else if (gpio_get(GP_ATT)) {
       gSM.state = SM_A1;
     }
-
     break;
   }
   case SM_A0C0: {
-
     if (gpio_get(GP_CLK)) {
       gSM.state = SM_A0C1;
-
       // rising edge clock
-
       if (gpio_get(GP_CMD)) {
         if (gSM.y < 2) {
           gSM.cmd[gSM.y] |= 1 << (gSM.i);
         }
       }
-
       ++gSM.i;
       if (gSM.i == 8) {
         gSM.i = 0;
-
         if (gSM.y == 0) {
           if (gSM.cmd[gSM.y] != 1) {
             gSM.state = SM_A0;
@@ -147,23 +221,18 @@ void SM_task() {
             break;
           }
         }
-
         sleep_us(11);
         gpio_set_dir(GP_DAT, GPIO_IN);
-
         if (gSM.y < gSM.size) {
           gpio_set_dir(GP_ACK, GPIO_OUT);
           sleep_us(3);
           gpio_set_dir(GP_ACK, GPIO_IN);
         }
-
         ++gSM.y;
       }
-
     } else if (gpio_get(GP_ATT)) {
       gSM.state = SM_A1;
     }
-
     break;
   }
   }
@@ -201,42 +270,9 @@ int main(void) {
   gpio_set_dir(GP_ACK, GPIO_IN);
   gpio_clr_mask((1 << GP_ACK));
 
-  PIO pio;
-  uint sm;
-  uint offset;
-
-  // This will find a free pio and state machine for our program and load it for
-  // us We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range
-  // variant) so we will get a PIO instance suitable for addressing gpios >= 32
-  // if needed and supported by the hardware
-  bool success = pio_claim_free_sm_and_add_program_for_gpio_range(
-      &ws2812_program, &pio, &sm, &offset, WS2812_PIN, 1, true);
-  hard_assert(success);
-
-  ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
-
-  uint32_t pixel_grb = 0;
-
   SM_init();
 
   while (true) {
-    // tight_loop_contents();
-
-    /*pixel_grb = 0x110000;
-
-    sleep_ms(250);
-    pio_sm_put_blocking(pio, sm, pixel_grb << 8u);
-
-    pixel_grb = 0x001100;
-
-    sleep_ms(250);
-    pio_sm_put_blocking(pio, sm, pixel_grb << 8u);
-
-    pixel_grb = 0x000011;
-
-    sleep_ms(250);
-    pio_sm_put_blocking(pio, sm, pixel_grb << 8u);*/
-
     SM_task();
   }
 
