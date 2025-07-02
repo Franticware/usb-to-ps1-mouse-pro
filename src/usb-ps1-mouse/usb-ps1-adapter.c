@@ -30,8 +30,6 @@
 
 /*------------- MAIN -------------*/
 
-// uint32_t gPixGRB = 0;
-
 #define PIX_OFF 0
 #define PIX_BLINK 1
 #define PIX_MOUSE 2
@@ -148,6 +146,29 @@ typedef struct {
 
 ConSM gSM;
 
+#define PROT_NONE 0
+#define PROT_KEYB 1
+#define PROT_MOUSE 2
+
+uint8_t gContrProt = PROT_NONE;
+
+auto_init_mutex(mtx);
+
+static int8_t gSumX = 0;
+static int8_t gSumY = 0;
+static bool gL = false;
+static bool gR = false;
+
+// sum with saturation
+int8_t sumSat(int8_t a, int8_t b) {
+  int16_t ret = (int16_t)a + (int16_t)b;
+  if (ret < -128)
+    ret = -128;
+  if (ret > 127)
+    ret = 127;
+  return ret;
+}
+
 void SM_init() {
   if (gpio_get(GP_ATT)) {
     gSM.state = SM_A1;
@@ -207,13 +228,53 @@ void SM_task() {
             gSM.state = SM_A0;
             break;
           } else {
+            /*
             gSM.size = 6;
             gSM.data[0] = 0x12;
             gSM.data[1] = 0x5A;
             gSM.data[2] = 0xFF;
             gSM.data[3] = 0x00;
             gSM.data[4] = 0x00;
-            gSM.data[5] = 0x00;
+            gSM.data[5] = 0x00;*/
+
+            bool buttonL = false;
+            bool buttonR = false;
+
+            if (gContrProt == PROT_MOUSE)
+            {
+              mutex_enter_blocking(&mtx);
+              int8_t sumX = gSumX;
+              gSumX = 0;
+              int8_t sumY = gSumY;
+              gSumY = 0;
+              buttonL = gL;
+              buttonR = gR;
+              mutex_exit(&mtx);
+
+              uint8_t buttons1 = 3;
+              if (buttonL) {
+                buttons1 |= 8;
+              }
+              if (buttonR) {
+                buttons1 |= 4;
+              }
+
+              gSM.size = 6;
+              gSM.data[0] = 0x12;
+              gSM.data[1] = 0x5A;
+              gSM.data[2] = 0xFF;
+              gSM.data[3] = ~buttons1;
+              gSM.data[4] = sumX;
+              gSM.data[5] = sumY;
+            }
+            else
+            {
+              gSM.state = SM_A0;
+              break;
+            }
+
+
+
           }
         } else if (gSM.y == 1) {
           if (gSM.cmd[gSM.y] != 0x42) {
@@ -283,6 +344,40 @@ int main(void) {
 // Host HID
 //--------------------------------------------------------------------+
 
+typedef struct {
+  uint8_t protocol;
+  uint8_t dev_addr;
+  uint8_t instance;
+  MouseConf mouse;
+} USBDev;
+
+#define gUSBDevsCount 8
+static USBDev gUSBDevs[gUSBDevsCount] = {{0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}};
+
+USBDev* findEmptyDev()
+{
+  for (uint8_t i = 0; i != gUSBDevsCount; ++i)
+  {
+    if (gUSBDevs[i].protocol == PROT_NONE)
+    {
+      return gUSBDevs + i;
+    }
+  }
+  return NULL;
+}
+
+USBDev* findDev(uint8_t dev_addr, uint8_t instance)
+{
+  for (uint8_t i = 0; i != gUSBDevsCount; ++i)
+  {
+    if (gUSBDevs[i].dev_addr == dev_addr && gUSBDevs[i].instance == instance)
+    {
+      return gUSBDevs + i;
+    }
+  }
+  return NULL;
+}
+
 // Invoked when device with hid interface is mounted
 // Report descriptor is also available for use.
 // tuh_hid_parse_report_descriptor() can be used to parse common/simple enough
@@ -313,6 +408,36 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance,
   }
   printf("\"");
 
+  if (itf_protocol == PROT_KEYB)
+  {
+    USBDev* usbdev = NULL;
+    if ((usbdev = findEmptyDev()))
+    {
+      usbdev->protocol = PROT_KEYB;
+      usbdev->dev_addr = dev_addr;
+      usbdev->instance = instance;
+      gPixState = PIX_KEYB;
+      gContrProt = PROT_KEYB;
+    }
+  }
+  else if (itf_protocol == PROT_MOUSE)
+  {
+    USBDev* usbdev = NULL;
+    MouseConf mouseConfTmp;
+    parseMouseDescr(desc_report, desc_len, &mouseConfTmp);
+    if (mouseConfTmp.xI != 255 && mouseConfTmp.yI != 255) {
+      if ((usbdev = findEmptyDev()))
+      {
+        usbdev->protocol = PROT_MOUSE;
+        usbdev->dev_addr = dev_addr;
+        usbdev->instance = instance;
+        usbdev->mouse = mouseConfTmp;
+        gPixState = PIX_MOUSE;
+        gContrProt = PROT_MOUSE;
+      }
+    }
+  }
+
   // Receive report from boot keyboard & mouse only
   // tuh_hid_report_received_cb() will be invoked when report is available
   if (itf_protocol == HID_ITF_PROTOCOL_KEYBOARD ||
@@ -330,17 +455,12 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
   printf("{\"event\":\"umount\",\"timestamp\":\"%llu\",\"address\":\"%u\","
          "\"instance\":\"%u\"},\n",
          currentTime, dev_addr, instance);
-}
 
-// look up new key in previous keys
-static inline bool find_key_in_report(hid_keyboard_report_t const *report,
-                                      uint8_t keycode) {
-  for (uint8_t i = 0; i < 6; i++) {
-    if (report->keycode[i] == keycode)
-      return true;
+  USBDev* usbdev = NULL;
+  if ((usbdev = findDev(dev_addr, instance)))
+  {
+    usbdev->protocol = PROT_NONE;
   }
-
-  return false;
 }
 
 // Invoked when received report from device via interrupt endpoint
@@ -368,4 +488,33 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance,
   }
 
   printf("},\n");
+
+
+  USBDev* usbdev = NULL;
+  if ((usbdev = findDev(dev_addr, instance)))
+  {
+    if (usbdev->protocol == PROT_MOUSE)
+    {
+      int8_t o[4];
+      if (parseMouseData(report, len, &usbdev->mouse, o) == 0) {
+        mutex_enter_blocking(&mtx);
+        if (gContrProt != PROT_MOUSE)
+        {
+          gSumX = 0;
+          gSumY = 0;
+        }
+        gSumX = sumSat(gSumX, o[1]);
+        gSumY = sumSat(gSumY, o[2]);
+        gL = o[0] & 1;
+        gR = o[0] & 2;
+        gContrProt = PROT_MOUSE;
+        gPixState = gL ? PIX_CLICK : PIX_MOUSE;
+        mutex_exit(&mtx);
+      }
+    }
+    else if (usbdev->protocol == PROT_KEYB)
+    {
+
+    }
+  }
 }

@@ -5,6 +5,7 @@ pico_generate_pio_header(${target_name} ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio OUT
 
 target_sources(${target_name} PRIVATE
  usb-ps1-adapter.c
+ parsemouse.c
  # can use 'tinyusb_pico_pio_usb' library later when pico-sdk is updated
  ${PICO_TINYUSB_PATH}/src/portable/raspberrypi/pio_usb/hcd_pio_usb.c
  )
