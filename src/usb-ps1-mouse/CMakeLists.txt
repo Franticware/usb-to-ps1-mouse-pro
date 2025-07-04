@@ -1,4 +1,4 @@
-set(target_name usb_ps1_mouse)
+set(target_name usb_ps1_adapter)
 add_executable(${target_name})
 
 pico_generate_pio_header(${target_name} ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio OUTPUT_DIR ${CMAKE_CURRENT_LIST_DIR})
