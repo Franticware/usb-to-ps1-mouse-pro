@@ -1,0 +1,6 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "PS1")(type "KiCad")(uri "${KIPRJMOD}/PS1.pretty")(options "")(descr ""))
+  (lib (name "RP2040_Board")(type "KiCad")(uri "${KIPRJMOD}/RP2040_Board.pretty")(options "")(descr ""))
+  (lib (name "usb2ps1mouse-specific")(type "KiCad")(uri "${KIPRJMOD}/usb2ps1mouse-specific.pretty")(options "")(descr ""))
+)
