@@ -19,6 +19,8 @@
 // MACRO CONSTANT TYPEDEF PROTYPES
 //--------------------------------------------------------------------+
 
+#define DEBUG_STDOUT 0
+
 #define IS_RGBW false
 #define WS2812_PIN 16
 
@@ -306,7 +308,9 @@ int main(void) {
 
   sleep_ms(10);
 
+#if DEBUG_STDOUT
   stdio_init_all();
+#endif
 
   multicore_reset_core1();
   // all USB task run in core1
@@ -395,6 +399,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance,
 
   uint64_t currentTime = to_us_since_boot(get_absolute_time());
 
+#if DEBUG_STDOUT
   printf("{\"event\":\"mount\",\"timestamp\":\"%llu\",\"vid\":\"%04x\",\"pid\":"
          "\"%04x\",\"address\":\"%u\",\"instance\":\"%u\",\"protocol\":\"%s\",",
          currentTime, vid, pid, dev_addr, instance, protocol_str[itf_protocol]);
@@ -407,6 +412,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance,
     printf("%02x", desc_report[i]);
   }
   printf("\"");
+#endif
 
   if (itf_protocol == PROT_KEYB)
   {
@@ -443,18 +449,24 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance,
   if (itf_protocol == HID_ITF_PROTOCOL_KEYBOARD ||
       itf_protocol == HID_ITF_PROTOCOL_MOUSE) {
     if (!tuh_hid_receive_report(dev_addr, instance)) {
+#if DEBUG_STDOUT
       printf(",\"error\":\"cannot request report\"");
+#endif
     }
   }
+#if DEBUG_STDOUT
   printf("},\n");
+#endif
 }
 
 // Invoked when device with hid interface is un-mounted
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
+#if DEBUG_STDOUT
   uint64_t currentTime = to_us_since_boot(get_absolute_time());
   printf("{\"event\":\"umount\",\"timestamp\":\"%llu\",\"address\":\"%u\","
          "\"instance\":\"%u\"},\n",
          currentTime, dev_addr, instance);
+#endif
 
   USBDev* usbdev = NULL;
   if ((usbdev = findDev(dev_addr, instance)))
@@ -467,6 +479,7 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance,
                                 uint8_t const *report, uint16_t len) {
 
+#if DEBUG_STDOUT
   uint64_t currentTime = to_us_since_boot(get_absolute_time());
 
   printf("{\"event\":\"report\",\"timestamp\":\"%llu\",\"address\":\"%u\","
@@ -481,14 +494,18 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance,
     printf("%02x", report[i]);
   }
   printf("\"");
+#endif
 
   // continue to request to receive report
   if (!tuh_hid_receive_report(dev_addr, instance)) {
+#if DEBUG_STDOUT
     printf(",\"error\":\"cannot request report\"");
+#endif
   }
 
+#if DEBUG_STDOUT
   printf("},\n");
-
+#endif
 
   USBDev* usbdev = NULL;
   if ((usbdev = findDev(dev_addr, instance)))
