@@ -10,7 +10,7 @@
 #include "pico/stdlib.h"
 #include "ws2812.pio.h"
 
-#define PIO_USB_DP_PIN_DEFAULT 2
+#define PIO_USB_DP_PIN_DEFAULT 2 // must be before usb headers
 
 #include "pio_usb.h"
 #include "tusb.h"
@@ -30,8 +30,6 @@
 #define GP_CMD 14
 #define GP_ACK 15
 
-/*------------- MAIN -------------*/
-
 #define PIX_OFF 0
 #define PIX_BLINK 1
 #define PIX_MOUSE 2
@@ -45,7 +43,48 @@
 #define COLOR_FAINT_RED 0x000300
 #define COLOR_FAINT_WARM_WHITE 0x020201
 
-uint8_t gPixState = PIX_OFF;
+static const uint16_t KEY_BUTTON_MAP[4 + 8 + 256 + 4] = {
+    0x454b, 0x4d59, 0x5041, 0x3e3e, 0,      0,      0,      0,      0x0008,
+    0x0001, 0,      0,      0,      0,      0,      0,      0x0080, 0,
+    0,      0x0020, 0x0100, 0x4000, 0x2000, 0,      0x0200, 0,      0x8000,
+    0x4000, 0,      0,      0x1000, 0x0800, 0x0400, 0x8000, 0x0040, 0x1000,
+    0,      0,      0x0010, 0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0x2000, 0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0x0020, 0x0080, 0x0040, 0x0010, 0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0,      0,
+    0,      0,      0,      0,      0,      0,      0,      0x3c3c, 0x454b,
+    0x4d59, 0x5041,
+
+};
+
+static const uint16_t *KEY_PTR = KEY_BUTTON_MAP + 4 + 8;
+static const uint16_t *MOD_PTR = KEY_BUTTON_MAP + 4;
+
+/*------------- MAIN -------------*/
+
+auto_init_mutex(mtx);
+uint8_t gPixState = PIX_BLINK;
 
 // core1: handle host events
 void core1_main() {
@@ -79,9 +118,8 @@ void core1_main() {
 
   uint64_t timeSum = 0;
 
-  const uint64_t updatePeriod = 50 * 1000;
+  const uint64_t updatePeriod = 50 * 1000; // 50k us = 20 upd/s
 
-  gPixState = PIX_BLINK;
   uint8_t blinkI = 0;
 
   uint32_t pixGRB = 0;
@@ -95,7 +133,10 @@ void core1_main() {
 
     if (timeSum >= updatePeriod) {
       timeSum -= updatePeriod;
-      switch (gPixState) {
+      mutex_enter_blocking(&mtx);
+      const uint8_t pixStateTmp = gPixState;
+      mutex_exit(&mtx);
+      switch (pixStateTmp) {
       case PIX_OFF:
         pixGRB = COLOR_BLACK;
         break;
@@ -119,7 +160,9 @@ void core1_main() {
         pixGRB = COLOR_FAINT_WARM_WHITE;
         break;
       default:
+        mutex_enter_blocking(&mtx);
         gPixState = PIX_OFF;
+        mutex_exit(&mtx);
         pixGRB = COLOR_BLACK;
         break;
       }
@@ -154,12 +197,12 @@ ConSM gSM;
 
 uint8_t gContrProt = PROT_NONE;
 
-auto_init_mutex(mtx);
-
 static int8_t gSumX = 0;
 static int8_t gSumY = 0;
 static bool gL = false;
 static bool gR = false;
+
+static uint16_t gButtons = 0;
 
 // sum with saturation
 int8_t sumSat(int8_t a, int8_t b) {
@@ -225,42 +268,35 @@ void SM_task() {
       ++gSM.i;
       if (gSM.i == 8) {
         gSM.i = 0;
+        // sleep_us(11);
+        sleep_us(15);
+        gpio_set_dir(GP_DAT, GPIO_IN);
+        if (gSM.y < gSM.size) {
+          gpio_set_dir(GP_ACK, GPIO_OUT);
+          // sleep_us(3);
+          sleep_us(4);
+          gpio_set_dir(GP_ACK, GPIO_IN);
+        }
+
         if (gSM.y == 0) {
           if (gSM.cmd[gSM.y] != 1) {
             gSM.state = SM_A0;
             break;
           } else {
-            /*
-            gSM.size = 6;
-            gSM.data[0] = 0x12;
-            gSM.data[1] = 0x5A;
-            gSM.data[2] = 0xFF;
-            gSM.data[3] = 0x00;
-            gSM.data[4] = 0x00;
-            gSM.data[5] = 0x00;*/
-
-            bool buttonL = false;
-            bool buttonR = false;
-
-            if (gContrProt == PROT_MOUSE)
-            {
-              mutex_enter_blocking(&mtx);
+            mutex_enter_blocking(&mtx);
+            if (gContrProt == PROT_MOUSE) {
+              uint8_t buttons1 = 3;
               int8_t sumX = gSumX;
               gSumX = 0;
               int8_t sumY = gSumY;
               gSumY = 0;
-              buttonL = gL;
-              buttonR = gR;
-              mutex_exit(&mtx);
-
-              uint8_t buttons1 = 3;
-              if (buttonL) {
+              if (gL) {
                 buttons1 |= 8;
               }
-              if (buttonR) {
+              if (gR) {
                 buttons1 |= 4;
               }
-
+              mutex_exit(&mtx);
               gSM.size = 6;
               gSM.data[0] = 0x12;
               gSM.data[1] = 0x5A;
@@ -268,28 +304,28 @@ void SM_task() {
               gSM.data[3] = ~buttons1;
               gSM.data[4] = sumX;
               gSM.data[5] = sumY;
+            } else if (gContrProt == PROT_KEYB) {
+              uint16_t buttons = gButtons;
+              mutex_exit(&mtx);
+              gSM.size = 4;
+              gSM.data[0] = 0x41;
+              gSM.data[1] = 0x5A;
+              gSM.data[2] = ~buttons;
+              gSM.data[3] = ~(buttons >> 8);
+            } else {
+              mutex_exit(&mtx);
+              gSM.size = 4;
+              gSM.data[0] = 0x41;
+              gSM.data[1] = 0x5A;
+              gSM.data[2] = 0xFF;
+              gSM.data[3] = 0xFF;
             }
-            else
-            {
-              gSM.state = SM_A0;
-              break;
-            }
-
-
-
           }
         } else if (gSM.y == 1) {
           if (gSM.cmd[gSM.y] != 0x42) {
             gSM.state = SM_A0;
             break;
           }
-        }
-        sleep_us(11);
-        gpio_set_dir(GP_DAT, GPIO_IN);
-        if (gSM.y < gSM.size) {
-          gpio_set_dir(GP_ACK, GPIO_OUT);
-          sleep_us(3);
-          gpio_set_dir(GP_ACK, GPIO_IN);
         }
         ++gSM.y;
       }
@@ -348,6 +384,35 @@ int main(void) {
 // Host HID
 //--------------------------------------------------------------------+
 
+bool testKeyboardDescr(const volatile uint8_t *descr, uint32_t descrLen) {
+  return descrLen > 4 && descr[0] == 0x05 && descr[1] == 0x01 &&
+         descr[2] == 0x09 && descr[3] == 0x06;
+}
+
+bool parseKeyboardData(const uint8_t *data, uint32_t dataLen,
+                       uint16_t *buttonsPtr) {
+  if (dataLen != 8) {
+    return false;
+  }
+  if (data[2] == 1 || data[3] == 1 || data[4] == 1 || data[5] == 1 ||
+      data[6] == 1 || data[7] == 1) {
+    return false;
+  }
+  uint16_t buttons = 0;
+  for (int i = 0; i != 8; ++i) {
+    if (data[0] & (1 << i)) {
+      buttons |= MOD_PTR[i];
+    }
+  }
+  for (int i = 2; i != 8; ++i) {
+    if (data[i]) {
+      buttons |= KEY_PTR[data[i]];
+    }
+  }
+  *buttonsPtr = buttons;
+  return true;
+}
+
 typedef struct {
   uint8_t protocol;
   uint8_t dev_addr;
@@ -356,26 +421,21 @@ typedef struct {
 } USBDev;
 
 #define gUSBDevsCount 8
-static USBDev gUSBDevs[gUSBDevsCount] = {{0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}};
+static USBDev gUSBDevs[gUSBDevsCount] = {{0}, {0}, {0}, {0},
+                                         {0}, {0}, {0}, {0}};
 
-USBDev* findEmptyDev()
-{
-  for (uint8_t i = 0; i != gUSBDevsCount; ++i)
-  {
-    if (gUSBDevs[i].protocol == PROT_NONE)
-    {
+USBDev *findEmptyDev() {
+  for (uint8_t i = 0; i != gUSBDevsCount; ++i) {
+    if (gUSBDevs[i].protocol == PROT_NONE) {
       return gUSBDevs + i;
     }
   }
   return NULL;
 }
 
-USBDev* findDev(uint8_t dev_addr, uint8_t instance)
-{
-  for (uint8_t i = 0; i != gUSBDevsCount; ++i)
-  {
-    if (gUSBDevs[i].dev_addr == dev_addr && gUSBDevs[i].instance == instance)
-    {
+USBDev *findDev(uint8_t dev_addr, uint8_t instance) {
+  for (uint8_t i = 0; i != gUSBDevsCount; ++i) {
+    if (gUSBDevs[i].dev_addr == dev_addr && gUSBDevs[i].instance == instance) {
       return gUSBDevs + i;
     }
   }
@@ -391,15 +451,16 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance,
                       uint8_t const *desc_report, uint16_t desc_len) {
 
   // Interface protocol (hid_interface_protocol_enum_t)
-  const char *protocol_str[] = {"None", "Keyboard", "Mouse"};
   uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
 
   uint16_t vid, pid;
   tuh_vid_pid_get(dev_addr, &vid, &pid);
 
+#if DEBUG_STDOUT
+  const char *protocol_str[] = {"None", "Keyboard", "Mouse"};
+
   uint64_t currentTime = to_us_since_boot(get_absolute_time());
 
-#if DEBUG_STDOUT
   printf("{\"event\":\"mount\",\"timestamp\":\"%llu\",\"vid\":\"%04x\",\"pid\":"
          "\"%04x\",\"address\":\"%u\",\"instance\":\"%u\",\"protocol\":\"%s\",",
          currentTime, vid, pid, dev_addr, instance, protocol_str[itf_protocol]);
@@ -414,32 +475,33 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance,
   printf("\"");
 #endif
 
-  if (itf_protocol == PROT_KEYB)
-  {
-    USBDev* usbdev = NULL;
-    if ((usbdev = findEmptyDev()))
-    {
-      usbdev->protocol = PROT_KEYB;
-      usbdev->dev_addr = dev_addr;
-      usbdev->instance = instance;
-      gPixState = PIX_KEYB;
-      gContrProt = PROT_KEYB;
+  if (itf_protocol == PROT_KEYB) {
+    USBDev *usbdev = NULL;
+    if (testKeyboardDescr(desc_report, desc_len)) {
+      if ((usbdev = findEmptyDev())) {
+        usbdev->protocol = PROT_KEYB;
+        usbdev->dev_addr = dev_addr;
+        usbdev->instance = instance;
+        mutex_enter_blocking(&mtx);
+        gPixState = PIX_KEYB;
+        gContrProt = PROT_KEYB;
+        mutex_exit(&mtx);
+      }
     }
-  }
-  else if (itf_protocol == PROT_MOUSE)
-  {
-    USBDev* usbdev = NULL;
+  } else if (itf_protocol == PROT_MOUSE) {
+    USBDev *usbdev = NULL;
     MouseConf mouseConfTmp;
     parseMouseDescr(desc_report, desc_len, &mouseConfTmp);
     if (mouseConfTmp.xI != 255 && mouseConfTmp.yI != 255) {
-      if ((usbdev = findEmptyDev()))
-      {
+      if ((usbdev = findEmptyDev())) {
         usbdev->protocol = PROT_MOUSE;
         usbdev->dev_addr = dev_addr;
         usbdev->instance = instance;
         usbdev->mouse = mouseConfTmp;
+        mutex_enter_blocking(&mtx);
         gPixState = PIX_MOUSE;
         gContrProt = PROT_MOUSE;
+        mutex_exit(&mtx);
       }
     }
   }
@@ -468,9 +530,8 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
          currentTime, dev_addr, instance);
 #endif
 
-  USBDev* usbdev = NULL;
-  if ((usbdev = findDev(dev_addr, instance)))
-  {
+  USBDev *usbdev = NULL;
+  if ((usbdev = findDev(dev_addr, instance))) {
     usbdev->protocol = PROT_NONE;
   }
 }
@@ -507,19 +568,12 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance,
   printf("},\n");
 #endif
 
-  USBDev* usbdev = NULL;
-  if ((usbdev = findDev(dev_addr, instance)))
-  {
-    if (usbdev->protocol == PROT_MOUSE)
-    {
+  USBDev *usbdev = NULL;
+  if ((usbdev = findDev(dev_addr, instance))) {
+    if (usbdev->protocol == PROT_MOUSE) {
       int8_t o[4];
       if (parseMouseData(report, len, &usbdev->mouse, o) == 0) {
         mutex_enter_blocking(&mtx);
-        if (gContrProt != PROT_MOUSE)
-        {
-          gSumX = 0;
-          gSumY = 0;
-        }
         gSumX = sumSat(gSumX, o[1]);
         gSumY = sumSat(gSumY, o[2]);
         gL = o[0] & 1;
@@ -528,10 +582,24 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance,
         gPixState = gL ? PIX_CLICK : PIX_MOUSE;
         mutex_exit(&mtx);
       }
-    }
-    else if (usbdev->protocol == PROT_KEYB)
-    {
-
+    } else if (usbdev->protocol == PROT_KEYB) {
+      uint16_t buttons = 0;
+      if (parseKeyboardData(report, len, &buttons)) {
+        mutex_enter_blocking(&mtx);
+        gSumX = 0;
+        gSumY = 0;
+        gButtons = buttons;
+        gContrProt = PROT_KEYB;
+        gPixState = buttons & 8 ? PIX_CLICK : PIX_KEYB;
+        mutex_exit(&mtx);
+      } else {
+        mutex_enter_blocking(&mtx);
+        gSumX = 0;
+        gSumY = 0;
+        gContrProt = PROT_KEYB;
+        gPixState = PIX_OVF;
+        mutex_exit(&mtx);
+      }
     }
   }
 }
