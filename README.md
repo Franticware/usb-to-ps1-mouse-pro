@@ -28,8 +28,10 @@ Printing in clear PETG is recommended.
 
 ## Notes
 
+* Important:
+  * Make sure the USB device is rated for 100 mA or less (most USB mice and keyboards are). Do not connect devices with higher (or unspecified) current draw.
 * Known issues:
-  * **Incompatible with PSOne** (SCPH-10X), where there are issues such as game stuttering and console reset.
+  * Fixed in PCB_3: Incompatible with PSOne (SCPH-10X), where there are issues such as game stuttering and console reset.
   * In rare cases, Lemmings might pause during gameplay.
   * USB mouse compatibility is not 100%. The same applies to USB keyboards.
 * Gameplay video:

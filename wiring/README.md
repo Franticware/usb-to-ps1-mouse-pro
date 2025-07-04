@@ -1,3 +1,5 @@
+### ⚠️ Notice: This wiring guide is outdated. Please wait until it is up-to-date with board revision PCB_3.
+
 ## Handwiring the adapter
 
 Building the PCB variant is recommended, but some may prefer this one. It does not look as good, but works just as well.
