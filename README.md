@@ -2,6 +2,8 @@
 
 This is an adapter for connecting USB mouse to PS1. It emulates the original [SCPH-1090 PlayStation Mouse](https://en.wikipedia.org/wiki/PlayStation_Mouse).
 
+It can also convert [keyboard key presses to controller button presses](doc/keyboard).
+
 ![PlayStation with USB mouse connected](media/usb-to-ps1-mouse-pro.jpg)
 
 ## Availability

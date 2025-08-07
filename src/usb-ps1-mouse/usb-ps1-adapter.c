@@ -91,7 +91,6 @@ void core1_main() {
   sleep_ms(10);
 
   // Use tuh_configure() to pass pio configuration to the host stack
-  // Note: tuh_configure() must be called before
   tuh_hid_set_default_protocol(HID_PROTOCOL_REPORT);
   pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;
   tuh_configure(1, TUH_CFGID_RPI_PIO_USB_CONFIGURATION, &pio_cfg);
@@ -175,27 +174,22 @@ void core1_main() {
   }
 }
 
-#define SM_A0 0
-#define SM_A1 1
-#define SM_A0C1 2
-#define SM_A0C0 3
+enum EState : uint8_t { SM_A0 = 0, SM_A1 = 1, SM_A0C1 = 2, SM_A0C0 = 3 };
 
 typedef struct {
-  uint8_t state;
-  uint8_t i; // bit index
-  uint8_t y; // byte index
+  enum EState state;
+  uint8_t bitIndex;
+  uint8_t byteIndex;
   uint8_t cmd[2];
   uint8_t data[10]; // mouse/pad data
   uint8_t size;     // mouse/pad data size
 } ConSM;
 
-ConSM gSM;
+static ConSM gSM;
 
-#define PROT_NONE 0
-#define PROT_KEYB 1
-#define PROT_MOUSE 2
+enum EProt : uint8_t { PROT_NONE = 0, PROT_KEYB = 1, PROT_MOUSE = 2 };
 
-uint8_t gContrProt = PROT_NONE;
+static enum EProt gContrProt = PROT_NONE;
 
 static int8_t gSumX = 0;
 static int8_t gSumY = 0;
@@ -234,7 +228,7 @@ void SM_task() {
   case SM_A1: {
     gpio_set_dir(GP_DAT, GPIO_IN);
     if (!gpio_get(GP_ATT)) {
-      gSM.i = gSM.y = 0;
+      gSM.bitIndex = gSM.byteIndex = 0;
       gSM.cmd[0] = gSM.cmd[1] = 0;
       gSM.state = SM_A0C1;
     }
@@ -244,8 +238,8 @@ void SM_task() {
     if (!gpio_get(GP_CLK)) {
       gSM.state = SM_A0C0;
       // falling edge clock
-      if (gSM.y > 0 && gSM.y <= gSM.size) {
-        if (gSM.data[gSM.y - 1] & (1 << gSM.i)) {
+      if (gSM.byteIndex > 0 && gSM.byteIndex <= gSM.size) {
+        if (gSM.data[gSM.byteIndex - 1] & (1 << gSM.bitIndex)) {
           gpio_set_dir(GP_DAT, GPIO_IN);
         } else {
           gpio_set_dir(GP_DAT, GPIO_OUT);
@@ -261,25 +255,25 @@ void SM_task() {
       gSM.state = SM_A0C1;
       // rising edge clock
       if (gpio_get(GP_CMD)) {
-        if (gSM.y < 2) {
-          gSM.cmd[gSM.y] |= 1 << (gSM.i);
+        if (gSM.byteIndex < 2) {
+          gSM.cmd[gSM.byteIndex] |= 1 << (gSM.bitIndex);
         }
       }
-      ++gSM.i;
-      if (gSM.i == 8) {
-        gSM.i = 0;
+      ++gSM.bitIndex;
+      if (gSM.bitIndex == 8) {
+        gSM.bitIndex = 0;
         // sleep_us(11);
         sleep_us(15);
         gpio_set_dir(GP_DAT, GPIO_IN);
-        if (gSM.y < gSM.size) {
+        if (gSM.byteIndex < gSM.size) {
           gpio_set_dir(GP_ACK, GPIO_OUT);
           // sleep_us(3);
           sleep_us(4);
           gpio_set_dir(GP_ACK, GPIO_IN);
         }
 
-        if (gSM.y == 0) {
-          if (gSM.cmd[gSM.y] != 1) {
+        if (gSM.byteIndex == 0) {
+          if (gSM.cmd[gSM.byteIndex] != 1) {
             gSM.state = SM_A0;
             break;
           } else {
@@ -321,13 +315,13 @@ void SM_task() {
               gSM.data[3] = 0xFF;
             }
           }
-        } else if (gSM.y == 1) {
-          if (gSM.cmd[gSM.y] != 0x42) {
+        } else if (gSM.byteIndex == 1) {
+          if (gSM.cmd[gSM.byteIndex] != 0x42) {
             gSM.state = SM_A0;
             break;
           }
         }
-        ++gSM.y;
+        ++gSM.byteIndex;
       }
     } else if (gpio_get(GP_ATT)) {
       gSM.state = SM_A1;
