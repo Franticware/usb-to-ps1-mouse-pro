@@ -197,8 +197,6 @@ static bool gR = false;
 
 static uint16_t gButtons = 0;
 
-static int64_t gAckWait = 4;
-
 // sum with saturation
 int8_t sumSat(int8_t a, int8_t b) {
   int16_t ret = (int16_t)a + (int16_t)b;
@@ -269,7 +267,7 @@ void SM_task() {
         if (gSM.byteIndex < gSM.size) {
           gpio_set_dir(GP_ACK, GPIO_OUT);
           // sleep_us(3);
-          sleep_us(gAckWait);
+          sleep_us(4);
           gpio_set_dir(GP_ACK, GPIO_IN);
         }
 
@@ -384,9 +382,6 @@ bool testKeyboardDescr(const volatile uint8_t *descr, uint32_t descrLen) {
          descr[2] == 0x09 && descr[3] == 0x06;
 }
 
-static bool bPlus = false;
-static bool bMinus = false;
-
 bool parseKeyboardData(const uint8_t *data, uint32_t dataLen,
                        uint16_t *buttonsPtr) {
   if (dataLen != 8) {
@@ -405,32 +400,6 @@ bool parseKeyboardData(const uint8_t *data, uint32_t dataLen,
   for (int i = 2; i != 8; ++i) {
     if (data[i]) {
       buttons |= KEY_PTR[data[i]];
-    }
-
-    /*#define KEY_KPMINUS 0x56 // Keypad -
-     #define KEY_KPPLUS 0x57 // Keypad +**/
-
-    bool bPlusPrev = bPlus;
-    bool bMinusPrev = bMinus;
-
-    if (data[i] == 0x57)
-    {
-      bPlus = true;
-    }
-
-    if (data[i] == 0x56)
-    {
-      bMinus = true;
-    }
-
-    if (bPlus && !bPlusPrev)
-    {
-      ++gAckWait;
-    }
-    if (bMinus && !bMinusPrev)
-    {
-      --gAckWait;
-      if (gAckWait < 0) gAckWait = 0;
     }
   }
   *buttonsPtr = buttons;

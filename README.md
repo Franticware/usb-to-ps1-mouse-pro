@@ -14,7 +14,7 @@ It can also convert [keyboard key presses to controller button presses](https://
 
 The firmware is written mostly in C. It depends on [Raspberry Pi Pico SDK](https://github.com/raspberrypi/pico-sdk).
 
-For a guide on how to update the firmware, see [Flashing the Firmware]((https://franticware.github.io/usb-to-ps1-mouse-pro/flashing.html).
+For a guide on how to update the firmware, see [Flashing the Firmware](https://franticware.github.io/usb-to-ps1-mouse-pro/flashing.html).
 
 ## Hardware
 
